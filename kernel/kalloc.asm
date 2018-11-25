@@ -145,6 +145,11 @@ kalloc.kalloc:
 
     ; Add the header length and round to the lowest higher or equal block
     add cx, 16 + 255
+
+    ; If the value overflows CX, fail
+    jc .error
+
+    ; Divide by the block size
     shr cx, ALLOC_BLOCK_SIZE_POWER
 
     ; CX now contains the amount of blocks we want to allocate

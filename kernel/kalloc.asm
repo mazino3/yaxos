@@ -220,4 +220,4 @@ kalloc.kfree:
     ret
 
 
-kalloc._errorMessage db "kalloc: couldn't allocate block!", 13, 10, 0
+kalloc._errorMessage db "kalloc: out of memory!", 13, 10, 0

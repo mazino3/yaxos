@@ -33,6 +33,9 @@ endstruc
 kalloc._allocMap times KERNEL_HEAP_BLOCKS db 0
 
 
+; It's assumed that ALLOC_BLOCK_SIZE_POWER is larger than 4, so that only segments are needed to refer to allocated memory.
+
+
 ; Initializes the allocator.
 kalloc.init:
     ; Preserve the registers
@@ -132,7 +135,7 @@ kalloc.freeBlocks:
     ret
 
 
-; Allocates at least CX bytes, FS:DI point to the allocated memory.
+; Allocates at least CX bytes, FS will point to the allocated memory.
 ; Sets the carry flag if the allocation has failed.
 kalloc.kalloc:
     push eax
@@ -161,23 +164,13 @@ kalloc.kalloc:
     sub ax, kalloc._allocMap
     shl eax, ALLOC_BLOCK_SIZE_POWER
     add eax, KERNEL_HEAP_START
-
-    ; Find the segment:offset
-    mov ebx, eax
-    and eax, 0xfffffff0
-
-    ; BX is the offset
-    sub ebx, eax
-
-    ; AX is the segment
     shr eax, 4
 
     ; Initialize the allocation structure
     mov fs, ax
-    mov di, bx
 
-    mov [fs:di+allocHeader.blockIndex], si
-    mov [fs:di+allocHeader.blocksUsed], cx
+    mov [fs:allocHeader.blockIndex], si
+    mov [fs:allocHeader.blocksUsed], cx
 
     ; Add a 16-byte offset (past the allocation structure)
     inc ax
@@ -201,20 +194,20 @@ kalloc.kalloc:
     jmp .done
 
 
-; Frees a memory region allocated by kalloc.kalloc, FS:DI point to the block previously allocated.
+; Frees a memory region allocated by kalloc.kalloc, FS points to the block previously allocated.
 kalloc.kfree:
     push ax
     push cx
     push si
 
-    ; Decrement AX so that FS:DI points to the allocation structure.
+    ; Decrement AX so that FS points to the allocation structure.
     mov ax, fs
     dec ax
     mov fs, ax
 
     ; Call freeBlocks
-    mov si, [fs:di+allocHeader.blockIndex]
-    mov cx, [fs:di+allocHeader.blocksUsed]
+    mov si, [fs:allocHeader.blockIndex]
+    mov cx, [fs:allocHeader.blocksUsed]
     call kalloc.freeBlocks
 
     ; Restore the registers, done

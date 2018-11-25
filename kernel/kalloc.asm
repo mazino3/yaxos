@@ -189,6 +189,9 @@ kalloc.kalloc:
     ret
 
 .error:
+    mov si, kalloc._errorMessage
+    call console.print
+
     ; Set carry
     stc
     jmp .done
@@ -215,3 +218,6 @@ kalloc.kfree:
     pop cx
     pop ax
     ret
+
+
+kalloc._errorMessage db "kalloc: couldn't allocate block!", 13, 10, 0

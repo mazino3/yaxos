@@ -141,7 +141,7 @@ kalloc.kalloc:
     push si
 
     ; Add the header length and round to the lowest higher or equal block
-    add cx, 16 + 255
+    add cx, 16 + ALLOC_BLOCK_SIZE - 1
 
     ; If the value overflows CX, fail
     jc .error

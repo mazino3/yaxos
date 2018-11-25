@@ -13,8 +13,8 @@ console.clearScreen:
     push cx
     push dx
 
-    ; Simply print SCREEN_HEIGHT - 1 newlines and go to 0, 0.
-    mov cx, SCREEN_HEIGHT - 1
+    ; Simply print SCREEN_HEIGHT newlines and go to 0, 0.
+    mov cx, SCREEN_HEIGHT
 .loop:
     call console.newline
 

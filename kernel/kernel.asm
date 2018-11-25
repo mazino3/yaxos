@@ -9,10 +9,17 @@ jmp init
 %include "console.asm"
 %include "kalloc.asm"
 
+; Boot status
+bootStatus:
+    .driveNumber db 0
+
 init:
     ; Initialize the segments
     mov ax, cs
     mov ds, ax
+
+    ; Preserve the drive number
+    mov [bootStatus.driveNumber], dl
 
     ; Init kalloc
     call kalloc.init
@@ -20,23 +27,10 @@ init:
     ; Clear the screen
     call console.clearScreen
 
-    mov edx, 0x1337cafe
+    xor edx, edx
+    mov dl, [bootStatus.driveNumber]
     mov si, testMessage
     call console.printf
-
-.loop:
-    ; Try allocating memory
-    mov cx, 1
-    call kalloc.kalloc
-    jc halt
-
-    mov dx, fs
-    shl edx, 16
-    mov dx, di
-
-    mov si, testMessage2
-    call console.printf
-    jmp .loop
 
 halt:
     ; Wait for an interrupt, halt again
@@ -44,5 +38,4 @@ halt:
     jmp halt
 
 
-testMessage db "Hello world from YaxOS! Hex: %x.", 13, 10, 0
-testMessage2 db "alloc seg:off %x.", 13, 10, 0
+testMessage db "Hello world from YaxOS! Drive number: %x.", 13, 10, 0

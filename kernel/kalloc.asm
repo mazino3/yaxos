@@ -26,9 +26,6 @@ ALLOC_USED  equ 0xff
 struc allocHeader
     .blockIndex resw 1
     .blocksUsed resw 1
-
-    ; Make sure the header is 16 bytes long.
-    resb 14
 endstruc
 
 

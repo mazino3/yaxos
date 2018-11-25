@@ -1,0 +1,7 @@
+# Ignore the files generated in the build process
+bootsector/bootsector.bin
+
+mbr.bin
+bootsector.bin
+part.bin
+disk.img

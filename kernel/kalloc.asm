@@ -147,7 +147,7 @@ kalloc.kalloc:
     add cx, 16 + ALLOC_BLOCK_SIZE - 1
 
     ; If the value overflows CX, fail
-    jc .error
+    jc .overflowError
 
     ; Divide by the block size
     shr cx, ALLOC_BLOCK_SIZE_POWER
@@ -156,7 +156,7 @@ kalloc.kalloc:
 
     ; Try allocating blocks
     call kalloc.allocBlocks
-    jc .error
+    jc .outOfMemError
 
     ; SI now points into the allocation map, find the starting address.
     xor eax, eax
@@ -188,8 +188,16 @@ kalloc.kalloc:
 
     ret
 
-.error:
-    mov si, kalloc._errorMessage
+.outOfMemError:
+    mov si, kalloc._outOfMemErrorMessage
+    call console.print
+
+    ; Set carry
+    stc
+    jmp .done
+
+.overflowError:
+    mov si, kalloc._overflowErrorMessage
     call console.print
 
     ; Set carry
@@ -220,4 +228,5 @@ kalloc.kfree:
     ret
 
 
-kalloc._errorMessage db "kalloc: out of memory!", 13, 10, 0
+kalloc._outOfMemErrorMessage db "kalloc: out of memory!", 13, 10, 0
+kalloc._overflowErrorMessage db "kalloc: CX is too big!", 13, 10, 0

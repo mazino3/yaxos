@@ -213,6 +213,7 @@ kalloc.kfree:
     push ax
     push cx
     push si
+    push fs
 
     ; Decrement AX so that FS points to the allocation structure.
     mov ax, fs
@@ -225,6 +226,7 @@ kalloc.kfree:
     call kalloc.freeBlocks
 
     ; Restore the registers, done
+    pop fs
     pop si
     pop cx
     pop ax

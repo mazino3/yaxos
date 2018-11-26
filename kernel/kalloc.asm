@@ -80,14 +80,17 @@ kalloc.allocBlocks:
     mov al, ALLOC_FREE
     rep scasb
 
+    ; Have we checked all the bytes, or has rep terminated?
     jz .found
 
     ; Next series of blocks
     inc si
 
-    ; We're out of memory
-    cmp si, kalloc._allocMap + KERNEL_HEAP_BLOCKS
-    jz .error
+    ; Are we out of memory?
+    mov di, si
+    add di, dx
+    cmp di, kalloc._allocMap + KERNEL_HEAP_BLOCKS
+    jae .error
 
     ; Check another block
     jmp .checkBlock

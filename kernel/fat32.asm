@@ -43,6 +43,7 @@ struc FATBPB
     .systemId           resb 8
 endstruc
 
+
 ; FAT32 context
 struc FATContext
     .driveNumber        resb 1
@@ -55,6 +56,7 @@ struc FATContext
     .size:
 endstruc
 
+
 ; Disk Address Packet
 fat32._dap:
     .size       db 16
@@ -66,7 +68,7 @@ fat32._dap:
     .startLBAHi dd 0
 
 
-; Reads the EAX'th sector from the drive DL into the memory at FS:DI.
+; Reads the EAX'th sector from the drive DL into the memory at FS:0000.
 ; Returns with the carry set if the read was unsuccessful.
 fat32._readSector:
     push eax
@@ -75,7 +77,7 @@ fat32._readSector:
     ; Initialize the DAP
     mov [fat32._dap.startLBA], eax
     mov [fat32._dap.numSectors], word 1
-    mov [fat32._dap.offset], di
+    mov [fat32._dap.offset], word 0
     mov [fat32._dap.segment], fs
     mov si, fat32._dap
 
@@ -96,7 +98,6 @@ fat32._readSector:
 fat32.readPartition:
     push bx
     push cx
-    push di
     push fs
 
     ; Allocate a sector, make FS point to it.
@@ -108,7 +109,6 @@ fat32.readPartition:
 
     ; Read the first sector
     xor eax, eax
-    xor di, di
     call fat32._readSector
     jc .error
 
@@ -151,7 +151,6 @@ fat32.readPartition:
     or eax, eax
 
     pop fs
-    pop di
     pop cx
     pop bx
     ret
@@ -216,7 +215,6 @@ fat32.mount:
     push ebx
     push edx
     push cx
-    push di
     push fs
 
     ; Allocate memory for the first sector of the partition
@@ -227,7 +225,6 @@ fat32.mount:
     jc .errorNoFree
 
     ; Read the first sector of the partition
-    xor di, di
     call fat32._readSector
     jc .error
 
@@ -298,7 +295,6 @@ fat32.mount:
 
 .return:
     pop fs
-    pop di
     pop cx
     pop edx
     pop ebx
@@ -313,7 +309,6 @@ fat32.readFAT:
     push bx
     push cx
     push dx
-    push di
     push fs
 
     ; Allocate a sector for reading the FAT into (FS will point there).
@@ -338,7 +333,6 @@ fat32.readFAT:
 
     ; Read the sector
     mov dl, [gs:FATContext.driveNumber]
-    xor di, di
     call fat32._readSector
     jc .error
 
@@ -360,7 +354,6 @@ fat32.readFAT:
 .return:
     ; Restore the registers.
     pop fs
-    pop di
     pop dx
     pop cx
     pop bx

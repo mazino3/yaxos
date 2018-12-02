@@ -56,6 +56,26 @@ struc FATContext
     .size:
 endstruc
 
+; FAT directory entry
+struc FATDirEntry
+    .filename           resb 11
+    .attributes         resb 1
+    .reserved           resb 1
+    .createdTime10th    resb 1
+
+    .createdTime        resw 1
+    .createdDate        resw 1
+    .lastAccessedDate   resw 1
+    .firstClusterHi     resw 1
+    .lastModifiedTime   resw 1
+    .lastModifiedDate   resw 1
+    .firstCluster       resw 1
+    .fileSize           resd 1
+endstruc
+
+; Segments per directory entry
+FAT_SEGMENTS_PER_DIR_ENTRY  equ 2
+
 
 ; Disk Address Packet
 fat32._dap:
@@ -305,7 +325,7 @@ fat32.mount:
 ; Reads a FAT entry for a given cluster.
 ; EAX contains the cluster number, GS points to the FATContext structure.
 ; Returns with CF set on error, otherwise EAX will contain the value read or 0 if the cluster is EOF.
-fat32.readFAT:
+fat32._readFAT:
     push bx
     push cx
     push dx
@@ -348,6 +368,12 @@ fat32.readFAT:
     xor eax, eax
 
 .done:
+    ; Free the memory allocated.
+    call kalloc.kfree
+
+    ; Set ZF
+    test eax, eax
+
     ; Clear carry, no error.
     clc
 
@@ -365,5 +391,145 @@ fat32.readFAT:
 
 .errorNoFree:
     ; Set carry, done.
+    stc
+    jmp .return
+
+
+; Reads a given cluster (numbered EAX) into the buffer at FS:0.
+; GS should point to a FATContext structure.
+; CF will be set if the read has failed, clear otherwise.
+; FS is automatically incremented.
+fat32._readCluster:
+    push eax
+    push edx
+    push ecx
+
+    ; Subtract the cluster offset.
+    sub eax, 2
+
+    ; Find the count of sectors past which we need to read.
+    xor ecx, ecx
+    mov cl, [gs:FATContext.sectorsPerCluster]
+
+    ; EAX*ECX -> EDX:EAX
+    mul ecx
+
+    ; Add the offset of the first data sector.
+    add eax, [gs:FATContext.dataOffset]
+
+    ; How many sectors we need to read
+    mov cl, [gs:FATContext.sectorsPerCluster]
+
+    ; The drive number
+    mov dl, [gs:FATContext.driveNumber]
+
+.readSector:
+    ; Try reading the sector
+    call fat32._readSector
+
+    ; Error
+    jc .return
+
+    ; Increment FS by the size of one sector.
+    ; There's 32 segments per a 512-byte sector.
+    mov ax, fs
+    add ax, 32
+    mov fs, ax
+
+    ; More sectors?
+    dec cl
+    jnz .readSector
+
+    ; No carry
+    clc
+.return:
+    pop ecx
+    pop edx
+    pop eax
+    ret
+
+
+; Allocates memory and reads a cluster chain (starting from EAX) into it.
+; Returns with CF set if either the read or the allocation fails.
+; GS should point to the FATContext structure, FS will point to the allocated memory.
+; BP points to the segment of the end of the memory block.
+fat32._readClusterChain:
+    push eax
+    push edx
+    push cx
+
+    ; Find out the length of the cluster chain first.
+    xor cx, cx
+
+    ; Preserve EAX
+    mov edx, eax
+
+.lengthNextCluster:
+    ; The length of one cluster
+    add cx, [gs:FATContext.bytesPerCluster]
+
+    ; If CX overflows, the chain is too long.
+    jc .return
+
+    ; Read the index of the next cluster.
+    call fat32._readFAT
+
+    ; Error, return
+    jc .return
+
+    ; EOF, done
+    jz .lengthDone
+
+    ; Next cluster
+    jmp .lengthNextCluster
+.lengthDone:
+    ; Now try allocating the buffer for the cluster chain.
+    call kalloc.kalloc
+
+    ; Return on error
+    jc .return
+
+    ; FS now points to the allocated buffer.
+    ; Restore EAX
+    mov eax, edx
+
+    ; Preserve FS
+    mov dx, fs
+
+.readCluster:
+    ; Read the cluster EAX.
+    call fat32._readCluster
+
+    ; Free the memory and return on error.
+    jc .error
+
+    ; Read the index of the next cluster
+    call fat32._readFAT
+
+    ; Return on error.
+    jc .error
+
+    ; Read anoter cluster if we didn't encounter EOF yet.
+    jnz .readCluster
+
+    ; Preserve the old value of FS
+    mov bp, fs
+
+    ; Restore FS
+    mov fs, dx
+
+    ; Return, done.
+.return:
+    pop cx
+    pop edx
+    pop eax
+    ret
+
+.error:
+    ; Free the buffer
+    mov fs, dx
+    call kalloc.kfree
+
+    ; Set carry and return
     stc
     jmp .return

@@ -192,3 +192,79 @@ console.printf:
     pop si
     pop eax
     ret
+
+
+; Reads a line into ES:DI.
+; CX is the maximum length (excluding the terminating zero).
+console.readLine:
+    push ax
+    push bx
+    push di
+
+    ; BX is the position into the line right now.
+    xor bx, bx
+
+.wait:
+    ; Wait for a keypress
+    xor ax, ax
+    int 16h
+
+    ; Backspace
+    cmp al, 8
+    je .backspace
+
+    ; Enter
+    cmp al, 13
+    je .enter
+
+    ; If the character is not a backspace nor a newline
+    ;  and we're at the last char, just ignore it.
+    cmp bx, cx
+    je .wait
+
+    ; Print the character otherwise
+    mov ah, 0x0e
+    int 10h
+
+    ; Store, increment BX.
+    xchg bx, bx
+    stosb
+    inc bx
+    jmp .wait
+
+.backspace:
+    ; If there's nothing to erase, go back.
+    test bx, bx
+    jz .wait
+
+    ; Print a backspace.
+    mov ah, 0x0e
+    int 10h
+
+    ; Print a space (to erase the existing character).
+    mov al, ' '
+    int 10h
+
+    ; Print another backspace.
+    mov al, 8
+    int 10h
+
+    ; Decrement the pointer, wait.
+    dec bx
+    dec di
+    jmp .wait
+
+.enter:
+    ; Terminate the string.
+    xor al, al
+    stosb
+
+    ; Print a newline.
+    call console.newline
+
+    ; Done
+.done:
+    pop di
+    pop bx
+    pop ax
+    ret

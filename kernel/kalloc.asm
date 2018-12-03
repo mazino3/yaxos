@@ -42,14 +42,20 @@ kalloc.init:
     push ax
     push cx
     push di
+    push es
 
     ; Store KERNEL_HEAP_BLOCKS ALLOC_FREEs in the kernel allocation map.
     mov al, ALLOC_FREE
     mov cx, KERNEL_HEAP_BLOCKS
     mov di, kalloc._allocMap
+
+    ; DS->ES
+    push ds
+    pop es
     rep stosb
 
     ; Restore the registers, done.
+    pop es
     pop di
     pop cx
     pop ax
@@ -63,6 +69,11 @@ kalloc.allocBlocks:
     push cx
     push dx
     push di
+    push es
+
+    ; DS->ES
+    push ds
+    pop es
 
     ; Preserve CX
     mov dx, cx
@@ -106,6 +117,7 @@ kalloc.allocBlocks:
     clc
 
 .return:
+    pop es
     pop di
     pop dx
     pop cx
@@ -125,12 +137,18 @@ kalloc.freeBlocks:
     push ax
     push cx
     push di
+    push es
+
+    ; DS -> ES
+    push ds
+    pop es
 
     ; Write CX ALLOC_FREE bytes into the table
     mov al, ALLOC_FREE
     mov di, si
     rep stosb
 
+    pop es
     pop di
     pop cx
     pop ax

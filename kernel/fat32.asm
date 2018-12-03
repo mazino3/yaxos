@@ -71,6 +71,7 @@ struc FATDirEntry
     .lastModifiedDate   resw 1
     .firstCluster       resw 1
     .fileSize           resd 1
+    .size:
 endstruc
 
 ; Segments per directory entry

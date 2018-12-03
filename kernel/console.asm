@@ -227,7 +227,6 @@ console.readLine:
     int 10h
 
     ; Store, increment BX.
-    xchg bx, bx
     stosb
     inc bx
     jmp .wait

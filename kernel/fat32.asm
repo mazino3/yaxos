@@ -77,6 +77,9 @@ endstruc
 ; Segments per directory entry
 FAT_SEGMENTS_PER_DIR_ENTRY  equ 2
 
+; FAT attributes
+FAT_ATTRIBUTE_DIRECTORY equ 0x10
+
 
 ; Disk Address Packet
 fat32._dap:
@@ -511,9 +514,6 @@ fat32.readClusterChain:
 
     ; Read anoter cluster if we didn't encounter EOF yet.
     jnz .readCluster
-
-    ; Preserve the old value of FS
-    mov bp, fs
 
     ; Restore FS
     mov fs, dx

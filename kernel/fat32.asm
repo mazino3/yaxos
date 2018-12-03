@@ -453,7 +453,7 @@ fat32._readCluster:
 ; Returns with CF set if either the read or the allocation fails.
 ; GS should point to the FATContext structure, FS will point to the allocated memory.
 ; CX will contain the amount of bytes read.
-fat32._readClusterChain:
+fat32.readClusterChain:
     push eax
     push edx
 

@@ -452,11 +452,10 @@ fat32._readCluster:
 ; Allocates memory and reads a cluster chain (starting from EAX) into it.
 ; Returns with CF set if either the read or the allocation fails.
 ; GS should point to the FATContext structure, FS will point to the allocated memory.
-; BP points to the segment of the end of the memory block.
+; CX will contain the amount of bytes read.
 fat32._readClusterChain:
     push eax
     push edx
-    push cx
 
     ; Find out the length of the cluster chain first.
     xor cx, cx
@@ -520,7 +519,6 @@ fat32._readClusterChain:
 
     ; Return, done.
 .return:
-    pop cx
     pop edx
     pop eax
     ret

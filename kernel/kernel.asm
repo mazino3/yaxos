@@ -3,25 +3,26 @@ org 0
 bits 16
 
 ; tohloo-loader has placed us at 17c0:0000.
-jmp init
+jmp kernel.init
 
 ; Include the subroutines
 %include "console.asm"
 %include "kalloc.asm"
 %include "fat32.asm"
+%include "shell.asm"
 
 ; Boot status
-bootStatus:
+kernel.bootStatus:
     .driveNumber db 0
 
-init:
+kernel.init:
     ; Initialize the segments
     mov ax, cs
     mov ds, ax
     mov es, ax
 
     ; Preserve the drive number
-    mov [bootStatus.driveNumber], dl
+    mov [kernel.bootStatus.driveNumber], dl
 
     ; Init kalloc
     call kalloc.init
@@ -30,7 +31,7 @@ init:
     call console.clearScreen
 
     ; Print the boot message
-    mov si, bootMessage
+    mov si, kernel.bootMessage
     call console.print
 
 .mount:
@@ -39,7 +40,7 @@ init:
     jc error
 
     ; Print the mount message
-    mov si, mountMessage
+    mov si, kernel.mountMessage
     call console.print
 
     ; DL already contains the drive number we want, clear DH.
@@ -47,7 +48,7 @@ init:
 
 .nextPart:
     ; Log
-    mov si, readPartMessage
+    mov si, kernel.readPartMessage
     call console.print
 
     ; Read the partition entry DH on drive DL.
@@ -61,7 +62,7 @@ init:
 
     ; Copy the LBA number into EDX for printf.
     mov edx, eax
-    mov si, partFoundMessage
+    mov si, kernel.partFoundMessage
     call console.printf
 
     ; Restore EDX
@@ -71,15 +72,14 @@ init:
     call fat32.mount
     jc .mountError
 
-    ; Done, test
-    mov eax, [fs:FATContext.rootCluster]
-    call fat32.readFAT
-    jc error
+    mov si, kernel.mountSuccessMessage
+    call console.print
 
-    mov edx, eax
-    mov si, testMessage
-    call console.printf
-    jmp halt
+    ; Initialize the shell
+    call shell.init
+
+    ; Jump into the shell
+    jmp shell.mainLoop
 
     ; Next?
 .skip:
@@ -88,35 +88,32 @@ init:
     jnz .nextPart
 
 .notFound:
-    mov si, partNotFoundMessage
+    mov si, kernel.partNotFoundMessage
     call console.print
-    jmp halt
+    jmp kernel.halt
 
 .mountError:
-    mov si, mountErrorMessage
+    mov si, kernel.mountErrorMessage
     call console.print
-    jmp halt
+    jmp kernel.halt
 
-
-halt:
+kernel.halt:
     ; Wait for an interrupt, halt again
     hlt
-    jmp halt
+    jmp kernel.halt
 
 error:
     ; Print the error message, halt
-    mov si, errorMessage
+    mov si, kernel.errorMessage
     call console.print
-    jmp halt
+    jmp kernel.halt
 
 
-bootMessage db "[+] kernel: booted!", 13, 10, 0
-
-errorMessage db "[!] kernel: error, halting...", 13, 10, 0
-mountMessage db "[+] kernel: looking for a partition...", 13, 10, 0
-readPartMessage db "[.] kernel: reading partition", 13, 10, 0
-partNotFoundMessage db "[!] kernel: no FAT32 partitions found!", 13, 10, 0
-partFoundMessage db "[+] kernel: found a FAT32 partition at LBA %x, mounting...", 13, 10, 0
-mountErrorMessage db "[!] kernel: couldn't mount the partition!", 13, 10, 0
-
-testMessage db "readFAT test: %x.", 13, 10, 0
+kernel.bootMessage db "[+] kernel: booted!", 13, 10, 0
+kernel.errorMessage db "[!] kernel: error, halting...", 13, 10, 0
+kernel.mountMessage db "[+] kernel: looking for a partition...", 13, 10, 0
+kernel.readPartMessage db "[.] kernel: reading partition", 13, 10, 0
+kernel.partNotFoundMessage db "[!] kernel: no FAT32 partitions found!", 13, 10, 0
+kernel.partFoundMessage db "[+] kernel: found a FAT32 partition at LBA %x, mounting...", 13, 10, 0
+kernel.mountErrorMessage db "[!] kernel: couldn't mount the partition!", 13, 10, 0
+kernel.mountSuccessMessage db "[+] kernel: mounted successfully", 13, 10, 0

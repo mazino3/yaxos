@@ -267,3 +267,12 @@ console.readLine:
     pop bx
     pop ax
     ret
+
+
+; Prints a single character in AL.
+console.printChar:
+    push ax
+    mov ah, 0x0e
+    int 10h
+    pop ax
+    ret

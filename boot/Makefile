@@ -19,6 +19,8 @@ disk.img: mbr.bin part.bin ../kernel/kernel.bin
 	cat mbr.bin part.bin > disk.img
 
 	$(MCOPY) -i disk.img@@$(PART_START)s ../kernel/kernel.bin \:\:/
+	$(MCOPY) -s -i disk.img@@$(PART_START)s ../root/* \:\:/
+	$(MCOPY) -i disk.img@@$(PART_START)s ../test-program/test.bin \:\:/
 
 mbr.bin:
 	$(DD) if=/dev/zero of=mbr.bin bs=512 count=$(DISK_SIZE)

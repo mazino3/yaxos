@@ -73,158 +73,132 @@ shell.error:
 
 ; Lists the files in the current directory along with their attributes.
 shell.listFiles:
-    push ax
+    push eax
     push bx
-    push cx
+    push ecx
     push si
-    push di
+    push bp
     push fs
-    push gs
 
-    ; Load the segments
+    ; Load the current directory segment.
     mov fs, [shell._status.currentDirectorySegment]
-    mov gs, [shell._status.FATContextSegment]
-    mov cx, [shell._status.currentDirectoryLength]
+    mov bp, [shell._status.currentDirectoryLength]
 
-.loop:
-    ; Another entry?
-    test cx, cx
-    jz .done
+.nextEntry:
+    ; Parse the directory entry at FS.
+    mov si, .tempFilename
+    call fat32.parseDirEntry
+    jc .done
 
-    ; If the filename starts with a zero, then there aren't any more entries.
-    mov al, [fs:0]
-    test al, al
-    jz .done
+    ; Type character
+    mov [.tempFilenameType], byte '-'
 
-    ; File entry
-    mov [shell._filenameLine.type], byte '-'
+    ; BL contains the attributes.
+    test bl, FAT_ATTRIBUTE_DIRECTORY
+    jz .skipDirectory
 
-    ; Is it a directory?
-    mov al, [fs:FATDirEntry.attributes]
-    test al, FAT_ATTRIBUTE_DIRECTORY
-    jz .notDirectory
+    ; Change the type to '+'
+    mov [.tempFilenameType], byte '+'
 
-    ; Set the type character to '+'
-    mov [shell._filenameLine.type], byte '+'
-
-.notDirectory:
-    ; Copy the filename
-    xor si, si
-    mov di, shell._filenameLine.filename
-    mov bx, 11
-
-    ; Copy BX bytes at FS:SI into DS:DI.
-.nextByte:
-    mov al, [fs:si]
-    mov [di], al
-    inc si
-    inc di
-    dec bx
-    jnz .nextByte
-
-    ; Print
-    mov si, shell._filenameLine
+    ; Skip
+.skipDirectory:
+    ; Print the filename.
+    mov si, .tempFilenameLine
     call console.print
+    call console.newline
 
-    ; Next directory entry
+    ; Next directory entry.
     mov ax, fs
     add ax, FAT_SEGMENTS_PER_DIR_ENTRY
     mov fs, ax
-    sub cx, FATDirEntry.size
-    jmp .loop
 
-.done:
-    pop gs
-    pop fs
-    pop di
-    pop si
-    pop cx
-    pop bx
-    pop ax
-    ret
-
-shell._filenameLine:
-    .type db 0
-    db " "
-    .filename times 11 db 0
-    db 13, 10, 0
-
-
-; Find a directory entry in the current directory whose filename matches that at DS:SI.
-; Returns with CF set if the file has not been found, otherwise FS will point to the entry.
-shell.findEntry:
-    push ax
-    push bx
-    push cx
-    push dx
-    push si
-    push di
-    push gs
-
-    ; Load the segments
-    mov fs, [shell._status.currentDirectorySegment]
-    mov gs, [shell._status.FATContextSegment]
-    mov cx, [shell._status.currentDirectoryLength]
-
-    ; Preserve SI
-    mov dx, si
-.loop:
-    ; More entries?
-    test cx, cx
-    jz .notFound
-
-    ; Compare 11 bytes at DS:DX with FS:DI.
-    mov si, dx
-    xor di, di
-    mov bx, 11
-.compareLoop:
-    mov ah, [si]
-    mov al, [fs:di]
-    inc si
-    inc di
-
-    cmp ah, al
+    ; Done?
+    sub bp, FATDirEntry.size
     jnz .nextEntry
 
-    ; More bytes?
-    dec bx
-    jnz .compareLoop
+.done:
+    ; Done, restore registers and exit.
+    pop fs
+    pop bp
+    pop si
+    pop ecx
+    pop bx
+    pop eax
+    ret
 
-.found:
-    ; Clear carry
+.tempFilenameLine:
+.tempFilenameType db 0
+    db " "
+.tempFilename times 13 db 0
+
+
+; Find a directory entry in the current directory whose filename matches that at ES:DI.
+; Returns with CF set if the file has not been found.
+; EAX, ECX, BL will be set appropriately.
+shell.findEntry:
+    push si
+    push bp
+    push fs
+
+    ; Load the segment of the current directory
+    mov fs, [shell._status.currentDirectorySegment]
+    mov bp, [shell._status.currentDirectoryLength]
+
+.loop:
+    ; Read the directory entry.
+    mov si, .tempFilename
+    call fat32.parseDirEntry
+
+    ; If this entry is empty, stop
+    jc .notFound
+
+    ; Compare the filenames, return if they match.
+    xchg bx, bx
+    call string.compare
+    jz .return
+
+    ; Next entry
+    mov ax, fs
+    add ax, FAT_SEGMENTS_PER_DIR_ENTRY
+    mov fs, ax
+    sub bp, FATDirEntry.size
+    jnz .loop
+
+    ; No more entries, not found.
+    jmp .notFound
+
+    ; Done, return
+.done:
+    ; No carry
     clc
-    jmp .return
-
+.return:
+    pop fs
+    pop bp
+    pop si
+    ret
 .notFound:
     ; Set carry
     stc
     jmp .return
 
-.nextEntry:
-    ; Next entry
-    mov ax, fs
-    add ax, FAT_SEGMENTS_PER_DIR_ENTRY
-    mov fs, ax
-    sub cx, FATDirEntry.size
-    jmp .loop
+.tempFilename times 13 db 0
 
-.return:
-    ; Return
-    pop gs
-    pop di
-    pop si
-    pop dx
-    pop cx
-    pop bx
-    pop ax
-    ret
 
-; Change the current directory to that starting from cluster EAX.
+; Change the current directory to the one referred to by ES:DI.
 shell.changeDirectory:
     push eax
-    push cx
+    push ecx
     push fs
     push gs
+    push si
+
+    ; Search for a directory entry with a given name.
+    call shell.findEntry
+    jc .notFound
+
+    ; Test is it's a directory.
+    test bl, FAT_ATTRIBUTE_DIRECTORY
+    jz .notADirectory
 
     ; Restore the segments.
     mov fs, [shell._status.currentDirectorySegment]
@@ -242,44 +216,113 @@ shell.changeDirectory:
     ; Read the cluster chain for the current directory.
     call fat32.readClusterChain
 
-    ; If that fails, report error and halt
-    jc shell.error
+    ; If that fails, report error.
+    jc .readError
 
     ; Write the new segment address
     mov [shell._status.currentDirectorySegment], fs
     mov [shell._status.currentDirectoryLength], cx
 
+.done:
+    ; No carry
+    clc
+
     ; Return
+.return:
+    pop si
     pop gs
     pop fs
-    pop cx
+    pop ecx
     pop eax
     ret
 
+.error:
+    ; Set carry
+    stc
+    jmp .return
 
-; Reads a file (EAX is the starting cluster).
-; ES will point to the buffer read.
+.notFound:
+    mov si, .notFoundMessage
+    call console.print
+    jmp .error
+
+.notADirectory:
+    mov si, .notADirectoryMessage
+    call console.print
+    jmp .error
+
+.readError:
+    mov si, .readErrorMessage
+    call console.print
+    jmp shell.error
+
+.notFoundMessage db "cd: directory not found.", 13, 10, 0
+.notADirectoryMessage db "cd: not a directory.", 13, 10, 0
+.readErrorMessage db "cd: read error, halting the shell.", 13, 10, 0
+
+
+; Reads a file (ES:DI contains the filename).
+; ES will point to the buffer read, CX bytes long.
 shell.readFile:
+    push eax
+    push bx
     push fs
     push gs
-    push cx
+
+    ; Search for a directory entry with a given name.
+    call shell.findEntry
+    jc .notFound
+
+    ; Test is it's a directory.
+    test bl, FAT_ATTRIBUTE_DIRECTORY
+    jnz .fileExpected
 
     ; Restore the FAT context segment.
     mov gs, [shell._status.FATContextSegment]
 
     ; Read the cluster chain
+    push cx
     call fat32.readClusterChain
-    jc shell.error
+    pop cx
+    jc .readError
 
     ; FS -> ES
     push fs
     pop es
 
-    pop cx
+    ; No carry
+    clc
+
+.return:
     pop gs
     pop fs
+    pop bx
+    pop eax
     ret
 
+.error:
+    ; Set carry, return
+    stc
+    jmp .return
+
+.notFound:
+    mov si, .notFoundMessage
+    call console.print
+    jmp .error
+
+.fileExpected:
+    mov si, .fileExpectedMessage
+    call console.print
+    jmp .error
+
+.readError:
+    mov si, .readErrorMessage
+    call console.print
+    jmp .error
+
+.notFoundMessage db "readFile: file not found.", 13, 10, 0
+.fileExpectedMessage db "readFile: file expected.", 13, 10, 0
+.readErrorMessage db "readFile: read error.", 13, 10, 0
 
 
 ; The main loop of the shell (get command, etc).
@@ -363,239 +406,91 @@ shell.mainLoop:
     jmp .waitCommand
 
 .commandCD:
-    ; Change directory
+    ; Change the current directory.
     ; CD requires an argument.
     test bx, bx
     jz .noArgument
 
-    ; Find the length of the directory name and test its length
+    ; Change the directory
     mov di, bx
-    call string.length
-    cmp cx, 11
-    ja .filenameTooLong
-
-    ; Copy and space-pad the directory name
-    xor cx, cx
-    mov si, shell._tempFilename
-    mov di, bx
-.copyFilenameLoop:
-    mov al, [es:di]
-
-    ; Zero?
-    test al, al
-    jz .copyFilenameDone
-
-    mov [si], al
-    inc di
-    inc si
-    inc cx
-    jmp .copyFilenameLoop
-.copyFilenameDone:
-    ; How many spaces do we need?
-    sub cx, 11
-    neg cx
-
-    ; Pad the directory name with spaces.
-.spacePad:
-    test cx, cx
-    jz .spacePadDone
-    mov [si], byte ' '
-    inc si
-    dec cx
-    jmp .spacePad
-.spacePadDone:
-    mov si, shell._tempFilename
-    call shell.findEntry
-    jc .fileNotFound
-
-    ; Test is it's a directory
-    mov al, [fs:FATDirEntry.attributes]
-    test al, FAT_ATTRIBUTE_DIRECTORY
-    jz .notADirectory
-
-    ; Done, change directory
-    xor eax, eax
-    mov ax, [fs:FATDirEntry.firstClusterHi]
-    shl eax, 16
-    mov ax, [fs:FATDirEntry.firstCluster]
     call shell.changeDirectory
 
     jmp .waitCommand
 
 .commandCat:
-    ; Print the contents of a file.
+    ; cat requires an argument.
+    test bx, bx
+    jz .noArgument
+
+    ; Read the file into ES.
     mov di, bx
-    call string.length
-
-    ; Check the filename length
-    cmp cx, 11
-    jne .invalidFilename
-
-    ; Copy the filename from ES:DI to DS:SI
-    mov si, shell._tempFilename
-
-    ; Copy the filename
-.copyFilenameByteCat:
-    mov al, [es:di]
-    mov [si], al
-    inc di
-    inc si
-    dec cx
-    jnz .copyFilenameByteCat
-
-    ; Find the file entry
-    mov si, shell._tempFilename
-    call shell.findEntry
-    jc .fileNotFound
-
-    mov al, [fs:FATDirEntry.attributes]
-    test al, FAT_ATTRIBUTE_DIRECTORY
-    jnz .fileExpected
-
-    ; Find the starting cluster
-    xor eax, eax
-    mov ax, [fs:FATDirEntry.firstClusterHi]
-    shl eax, 16
-    mov ax, [fs:FATDirEntry.firstCluster]
-
-    ; Preserve the size too.
-    mov ecx, [fs:FATDirEntry.fileSize]
-    cmp ecx, 65536
-    jae .fileTooLarge
-
-    ; Reads a file, ES points to the buffer
     call shell.readFile
 
-    ; Print the contents
-    xor si, si
-.printLoop:
-    mov al, [es:si]
+    ; On error, wait for the next command.
+    jc .waitCommand
+
+    xor di, di
+.printChar:
+    test cx, cx
+    jz .printDone
+
+    ; Print the character at ES:DI
+    mov al, [es:di]
+    inc di
     call console.printChar
-    inc si
+
+    ; Next character
     dec cx
-    jnz .printLoop
+    jmp .printChar
 
-    ; Another newline
-    call console.newline
-
-    push es
-    pop fs
+.printDone:
+    ; Release the memory the file was read into.
     call kalloc.kfree
 
-    ; TODO print file contents
+    ; Newline
+    call console.newline
     jmp .waitCommand
 
 .commandRun:
-    ; Execute a file.
+    ; run requires an argument.
+    test bx, bx
+    jz .noArgument
+
+    ; Read the file into ES.
     mov di, bx
-    call string.length
-
-    ; Check the filename length
-    cmp cx, 11
-    jne .invalidFilename
-
-    ; Copy the filename from ES:DI to DS:SI
-    mov si, shell._tempFilename
-
-    ; Copy the filename
-.copyFilenameByteRun:
-    mov al, [es:di]
-    mov [si], al
-    inc di
-    inc si
-    dec cx
-    jnz .copyFilenameByteRun
-
-    ; Find the file entry
-    mov si, shell._tempFilename
-    call shell.findEntry
-    jc .fileNotFound
-
-    mov al, [fs:FATDirEntry.attributes]
-    test al, FAT_ATTRIBUTE_DIRECTORY
-    jnz .fileExpected
-
-    ; Find the starting cluster
-    xor eax, eax
-    mov ax, [fs:FATDirEntry.firstClusterHi]
-    shl eax, 16
-    mov ax, [fs:FATDirEntry.firstCluster]
-
-    ; Preserve the size too.
-    mov ecx, [fs:FATDirEntry.fileSize]
-    cmp ecx, 65536
-    jae .fileTooLarge
-
-    ; Reads a file, ES points to the buffer
     call shell.readFile
 
-    ; Store ES in the far jump address
-    mov [shell._farJump.offset], word 0
-    mov [shell._farJump.segment], es
+    ; On error, wait for the next command.
+    jc .waitCommand
 
-    ; Execute the file.
-    pushad
+    ; Jump into the loaded program
+    mov [.farJumpSegment], es
+
+    pusha
     push ds
     push es
     push fs
     push gs
-    call far [shell._farJump]
+    call far [.farJump]
     pop gs
     pop fs
     pop es
     pop ds
-    popad
+    popa
 
-    push es
-    pop fs
+    ; Free the memory allocated.
     call kalloc.kfree
-
-    ; TODO print file contents
     jmp .waitCommand
-
-
 
 .noArgument:
     mov si, shell.noArgumentMessage
     call console.print
     jmp .waitCommand
 
-.filenameTooLong:
-    mov si, shell.filenameTooLongMessage
-    call console.print
-    jmp .waitCommand
+.farJump:
+.farJumpOffset dw 0
+.farJumpSegment dw 0
 
-.fileNotFound:
-    mov si, shell.fileNotFoundMessage
-    call console.print
-    jmp .waitCommand
-
-.notADirectory:
-    mov si, shell.notADirectoryMessage
-    call console.print
-    jmp .waitCommand
-
-.invalidFilename:
-    mov si, shell.invalidFilenameMessage
-    call console.print
-    jmp .waitCommand
-
-.fileExpected:
-    mov si, shell.fileExpectedMessage
-    call console.print
-    jmp .waitCommand
-
-.fileTooLarge:
-    mov si, shell.fileTooLargeMessage
-    call console.print
-    jmp .waitCommand
-
-
-; Temporary filename
-shell._tempFilename times 11 db 0
-shell._farJump:
-    .offset  dw 0
-    .segment dw 0
 
 shell.errorMessage db "[!] shell: error, halting.", 13, 10, 0
 shell.initMessage db "[+] shell: initializing...", 13, 10, 0
@@ -603,15 +498,9 @@ shell.readRootMessage db "[+] shell: reading root directory...", 13, 10, 0
 shell.allocMessage db "[+] shell: allocating memory for buffers...", 13, 10, 0
 shell.initDoneMessage db "[+] shell: initialization done.", 13, 10, 0
 
-shell.fileNotFoundMessage db "error: file not found!", 13, 10, 0
-shell.notADirectoryMessage db "error: not a directory.", 13, 10, 0
-shell.fileExpectedMessage db "error: expected a file, but a directory name was given", 13, 10, 0
-
 shell.commandPrompt db "YaxOS> ", 0
 shell.invalidCommandMessage db "error: invalid command, type 'help' for a list.", 13, 10, 0
 shell.noArgumentMessage db "error: this command requires an argument.", 13, 10, 0
-shell.filenameTooLongMessage db "error: filename too long.", 13, 10, 0
-shell.invalidFilenameMessage db "error: invalid filename.", 13, 10, 0
 shell.fileTooLargeMessage db "error: the file is too large.", 13, 10, 0
 
 shell.commandHelp db "help", 0

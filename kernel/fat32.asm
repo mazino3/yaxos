@@ -532,3 +532,158 @@ fat32.readClusterChain:
     ; Set carry and return
     stc
     jmp .return
+
+
+; Reads a directory entry at FS:0.
+; Returns the starting cluster number in EAX.
+; ECX is set the the length of the file.
+; BL is set to the value of the attributes field.
+; The filename is translated and copied into the 13-byte buffer at DS:SI.
+; If the directory entry is empty, CF will be set on return.
+fat32.parseDirEntry:
+    push dx
+    push si
+    push di
+    push bp
+
+    ; Preserve SI
+    mov bp, si
+
+    ; Is the filename null?
+    cmp byte [fs:FATDirEntry.filename], 0
+    jz .emptyEntry
+
+    ; Load the cluster number.
+    xor eax, eax
+    mov ax, [fs:FATDirEntry.firstClusterHi]
+    shl eax, 16
+    mov ax, [fs:FATDirEntry.firstCluster]
+
+    ; Load the attributes.
+    mov bl, [fs:FATDirEntry.attributes]
+
+    ; Copy the filename from FS:DI into DS:SI.
+    xor di, di
+    mov cx, 8
+
+.copyFilenameChar:
+    ; Load a character of the filename.
+    mov dl, [fs:di]
+    inc di
+
+    ; Is it a space?
+    cmp dl, ' '
+    jz .copyFilenameDone
+
+    ; Store the character
+    mov [si], dl
+    inc si
+
+    ; Have we reached the 8-character limit yet?
+    dec cx
+    jnz .copyFilenameChar
+
+.copyFilenameDone:
+    ; Dot entry?
+    cmp byte [fs:FATDirEntry.filename], '.'
+    jz .dotEntry
+
+    ; Dot (for the extension)
+    mov [si], byte '.'
+    inc si
+
+    ; Copy the extension
+    mov di, 8
+
+    ; Copy three bytes
+    mov cx, 3
+
+.copyExtensionChar:
+    ; Load a character of the extension.
+    mov dl, [fs:di]
+    inc di
+
+    ; Is it a space?
+    cmp dl, ' '
+    jz .copyExtensionDone
+
+    ; Store it
+    mov [si], dl
+    inc si
+
+    ; Done?
+    dec cx
+    jnz .copyExtensionChar
+.copyExtensionDone:
+
+    ; Done copying the extension
+    ; Does the filename end with a dot?
+    ; If yes, change that to a zero byte to terminate it.
+    cmp [si-1], byte '.'
+    jnz .skipTerminateExtension
+    mov [si-1], byte 0
+
+    ; No carry, return
+    jmp .done
+
+.skipTerminateExtension:
+    ; Terminate the filename string.
+    mov [si], byte 0
+
+.done:
+    ; Set ECX to the file length.
+    mov ecx, [fs:FATDirEntry.fileSize]
+
+    ; Convert the filename to the lower case.
+    mov si, bp
+.lowerCase:
+    ; Load a character
+    mov dl, [si]
+    inc si
+
+    ; Is it zero?
+    test dl, dl
+    jz .lowerCaseDone
+
+    ; Below 'A', skip.
+    cmp dl, 0x41
+    jb .lowerCase
+
+    ; Above 'Z', skip.
+    cmp dl, 0x5a
+    ja .lowerCase
+
+    ; Set the lowercase bit.
+    or dl, 0x20
+
+    ; Store it back
+    mov [si-1], dl
+
+    ; Repeat
+    jmp .lowerCase
+.lowerCaseDone:
+
+    ; No carry
+    clc
+
+.return:
+    ; Restore the registers, done.
+    pop bp
+    pop di
+    pop si
+    pop dx
+    ret
+
+.emptyEntry:
+    ; Set carry
+    stc
+    jmp .return
+
+.dotEntry:
+    ; Dot entry.
+
+    ; Terminate the filename.
+    mov [si], byte 0
+
+    ; Done
+    jmp .done

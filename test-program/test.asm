@@ -1,17 +1,17 @@
 ; YaxOS test program
 org 0
 
-; Set the segments, etc
+; Initialize the data segment
 mov ax, cs
 mov ds, ax
 
-mov ah, 0x0e
-mov al, 0x20
+; console.print syscall
+mov si, helloWorld
+mov bp, 0
+int 20h
 
-loop:
-    int 10h
-    inc al
-    cmp al, 0x7f
-    jnz loop
-
+; Return
 retf
+
+
+helloWorld db "Hello world from the YaxOS test program!", 13, 10, 0

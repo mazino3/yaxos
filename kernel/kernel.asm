@@ -34,10 +34,18 @@ kernel.init:
     mov si, kernel.bootMessage
     call console.print
 
+    ; Register the system call interrupt
+    mov bl, 0x20
+    mov dx, kernel.interrupt
+    call kernel.registerInterrupt
+
+    ; Restore the drive number
+    mov dl, [kernel.bootStatus.driveNumber]
+
 .mount:
     ; Try allocating a context structure for working with FAT
     call fat32.context.alloc
-    jc error
+    jc kernel.error
 
     ; Print the mount message
     mov si, kernel.mountMessage
@@ -53,7 +61,7 @@ kernel.init:
 
     ; Read the partition entry DH on drive DL.
     call fat32.readPartition
-    jc error
+    jc kernel.error
     jz .skip
 
     ; Found!
@@ -97,17 +105,102 @@ kernel.init:
     call console.print
     jmp kernel.halt
 
+kernel.error:
+    mov si, kernel.errorMessage
+    call console.print
+
 kernel.halt:
     ; Wait for an interrupt, halt again
     hlt
     jmp kernel.halt
 
-error:
-    ; Print the error message, halt
-    mov si, kernel.errorMessage
-    call console.print
-    jmp kernel.halt
 
+; Registers an interrupt handler.
+; BL is the interrupt number.
+; DX is the CS offset.
+kernel.registerInterrupt:
+    push ax
+    push bx
+    push es
+
+    ; Disable interrupts
+    cli
+
+    ; IVT segment
+    mov ax, 0
+    mov es, ax
+
+    ; BH = 0
+    xor bh, bh
+
+    ; BX *= 4
+    shl bx, 2
+
+    ; Offset
+    mov [es:bx], dx
+
+    ; Segment
+    mov [es:bx+2], cs
+
+    ; Enable interrupts
+    sti
+
+    ; Done, return
+    pop es
+    pop bx
+    pop ax
+    ret
+
+; The system call interrupt.
+; BP specifies the function to call.
+; 0 - print
+; 1 - printf
+; 2 - newline
+; 3 - printChar
+; 4 - readLine
+; 0x15 - kalloc
+; 0x16 - kfree
+kernel.interrupt:
+    ; Which function?
+    cmp bp, 0
+    jz .consolePrint
+    cmp bp, 1
+    jz .consolePrintf
+    cmp bp, 2
+    jz .consoleNewline
+    cmp bp, 3
+    jz .consolePrintChar
+    cmp bp, 4
+    jz .consoleReadLine
+    cmp bp, 0x15
+    jz .kallocKalloc
+    cmp bp, 0x16
+    jz .kallocKfree
+
+    ; None of the above, set carry and return
+    stc
+    iret
+.consolePrint:
+    call console.print
+    iret
+.consolePrintf:
+    call console.printf
+    iret
+.consoleNewline:
+    call console.newline
+    iret
+.consolePrintChar:
+    call console.printChar
+    iret
+.consoleReadLine:
+    call console.readLine
+    iret
+.kallocKalloc:
+    call kalloc.kalloc
+    iret
+.kallocKfree:
+    call kalloc.kfree
+    iret
 
 kernel.bootMessage db "[+] kernel: booted!", 13, 10, 0
 kernel.errorMessage db "[!] kernel: error, halting...", 13, 10, 0

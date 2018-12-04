@@ -153,7 +153,6 @@ shell.findEntry:
     jc .notFound
 
     ; Compare the filenames, return if they match.
-    xchg bx, bx
     call string.compare
     jz .return
 

@@ -504,6 +504,8 @@ shell.interrupt:
     jz .changeDirectory
     cmp bp, 1
     jz .readFile
+    cmp bp, 2
+    jz .findEntry
 
     ; None of the listed functions, set carry and return.
     stc
@@ -516,6 +518,11 @@ shell.interrupt:
 .readFile:
     call shell.readFile
     iret
+
+.findEntry:
+    call shell.findEntry
+    iret
+
 
 
 shell.errorMessage db "[!] shell: error, halting.", 13, 10, 0

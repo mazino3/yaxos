@@ -527,7 +527,6 @@ shell.initDoneMessage db "[+] shell: initialization done.", 13, 10, 0
 shell.commandPrompt db "YaxOS> ", 0
 shell.invalidCommandMessage db "error: invalid command, type 'help' for a list.", 13, 10, 0
 shell.noArgumentMessage db "error: this command requires an argument.", 13, 10, 0
-shell.fileTooLargeMessage db "error: the file is too large.", 13, 10, 0
 
 shell.commandHelp db "help", 0
 shell.commandLS db "ls", 0

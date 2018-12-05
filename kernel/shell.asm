@@ -217,6 +217,18 @@ shell.changeDirectory:
     push gs
     push si
 
+    ; Is it the special root directory name?
+    mov si, .rootDirectoryName
+    call string.compare
+
+    ; No, skip
+    jnz .skipRootName
+
+    ; Read the root cluster otherwise.
+    xor eax, eax
+    jmp .readClusters
+
+.skipRootName:
     ; Search for a directory entry with a given name.
     call shell.findEntry
     jc .notFound
@@ -225,6 +237,7 @@ shell.changeDirectory:
     test bl, FAT_ATTRIBUTE_DIRECTORY
     jz .notADirectory
 
+.readClusters:
     ; Restore the segments.
     mov fs, [shell._status.currentDirectorySegment]
     mov gs, [shell._status.FATContextSegment]
@@ -284,6 +297,7 @@ shell.changeDirectory:
 .notFoundMessage db "cd: directory not found.", 13, 10, 0
 .notADirectoryMessage db "cd: not a directory.", 13, 10, 0
 .readErrorMessage db "cd: read error, halting the shell.", 13, 10, 0
+.rootDirectoryName db ":root", 0
 
 
 ; Reads a file (ES:DI contains the filename).

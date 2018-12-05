@@ -198,7 +198,7 @@ kernel.systemInterrupt:
     pop ds
 
 	; Return
-	jmp kernel.iretCarry
+    jmp kernel.iretCarry
 
 .kalloc:
     call kalloc.kalloc

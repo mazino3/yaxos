@@ -8,10 +8,12 @@ SHELL_COMMAND_BUFFER_SIZE equ 256
 
 ; The current status of the shell
 shell._status:
-    .FATContextSegment       dw 0
-    .currentDirectorySegment dw 0
-    .currentDirectoryLength  dw 0
-    .commandBufferSegment    dw 0
+    .FATContextSegment          dw 0
+    .currentDirectorySegment    dw 0
+    .currentDirectoryLength     dw 0
+    .commandBufferSegment       dw 0
+    .currentDirectoryEnumPos    dw 0
+    .currentDirectoryEnumSeg    dw 0
 
 
 ; Initializes the shell.
@@ -71,23 +73,67 @@ shell.error:
     jmp kernel.halt
 
 
+; Prepares to enumerate the current directory.
+shell.enumDir.init:
+    push ax
+
+    ; Reset the enumeration position of the current directory.
+    mov [shell._status.currentDirectoryEnumPos], word 0
+    mov ax, [shell._status.currentDirectorySegment]
+    mov [shell._status.currentDirectoryEnumSeg], ax
+
+    pop ax
+    ret
+
+; Parses the next directory entry if it exists, otherwise returns with CF set.
+; The return registers are set according to fat32.parseDirEntry.
+shell.enumDir.nextEntry:
+    push fs
+
+    ; Are we at the end of the current directory?
+    mov ax, [shell._status.currentDirectoryLength]
+    cmp [shell._status.currentDirectoryEnumPos], ax
+    jz .eof
+
+    ; Set FS to the correct segment
+    mov fs, [shell._status.currentDirectoryEnumSeg]
+
+    ; Parse the directory entry
+    call fat32.parseDirEntry
+
+    ; EOF?
+    jc .eof
+
+    ; Increment the segment and the position
+    add word [shell._status.currentDirectoryEnumSeg], FAT_SEGMENTS_PER_DIR_ENTRY
+    add word [shell._status.currentDirectoryEnumPos], FATDirEntry.size
+
+    ; No carry
+    clc
+.return:
+    pop fs
+    ret
+
+.eof:
+    ; Set carry, return
+    stc
+    jmp .return
+
+
 ; Lists the files in the current directory along with their attributes.
 shell.listFiles:
     push eax
     push bx
     push ecx
     push si
-    push bp
-    push fs
 
-    ; Load the current directory segment.
-    mov fs, [shell._status.currentDirectorySegment]
-    mov bp, [shell._status.currentDirectoryLength]
+    ; Initialize the directory enumeration
+    call shell.enumDir.init
 
 .nextEntry:
     ; Parse the directory entry at FS.
     mov si, .tempFilename
-    call fat32.parseDirEntry
+    call shell.enumDir.nextEntry
     jc .done
 
     ; Type character
@@ -106,20 +152,10 @@ shell.listFiles:
     mov si, .tempFilenameLine
     call console.print
     call console.newline
-
-    ; Next directory entry.
-    mov ax, fs
-    add ax, FAT_SEGMENTS_PER_DIR_ENTRY
-    mov fs, ax
-
-    ; Done?
-    sub bp, FATDirEntry.size
-    jnz .nextEntry
+    jmp .nextEntry
 
 .done:
     ; Done, restore registers and exit.
-    pop fs
-    pop bp
     pop si
     pop ecx
     pop bx
@@ -137,19 +173,18 @@ shell.listFiles:
 ; EAX, ECX, BL will be set appropriately.
 shell.findEntry:
     push si
-    push bp
-    push fs
 
-    ; Load the segment of the current directory
-    mov fs, [shell._status.currentDirectorySegment]
-    mov bp, [shell._status.currentDirectoryLength]
+    ; Initialize the directory enumeration context.
+    call shell.enumDir.init
+
+    ; The filename to compare with.
+    mov si, .tempFilename
 
 .loop:
     ; Read the directory entry.
-    mov si, .tempFilename
-    call fat32.parseDirEntry
+    call shell.enumDir.nextEntry
 
-    ; If this entry is empty, stop
+    ; If EOF, stop
     jc .notFound
 
     ; Compare the filenames, return if they match.
@@ -157,22 +192,13 @@ shell.findEntry:
     jz .return
 
     ; Next entry
-    mov ax, fs
-    add ax, FAT_SEGMENTS_PER_DIR_ENTRY
-    mov fs, ax
-    sub bp, FATDirEntry.size
-    jnz .loop
-
-    ; No more entries, not found.
-    jmp .notFound
+    jmp .loop
 
     ; Done, return
 .done:
     ; No carry
     clc
 .return:
-    pop fs
-    pop bp
     pop si
     ret
 .notFound:

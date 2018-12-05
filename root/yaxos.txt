@@ -1,0 +1,8 @@
+YaxOS - Yet Another eXperimental OS
+===================================
+
+This is a really simple experimental operating system.
+Type 'help' at the command prompt for a list of available commands.
+
+When using 'cd' to change the current directory, a special directory name ':root'
+ will switch to the root directory automatically.

@@ -21,3 +21,7 @@ There's also a file called `testprog.com`, which is a test program that prints a
 
 
 Writing to the disk is not supported yet.
+
+
+To build the disk image in `boot/disk.img`, run `make` (requires nasm, mtools and parted).
+There's also an option to run the disk image in QEMU after building it, do `make test`.

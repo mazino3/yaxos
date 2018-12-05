@@ -158,6 +158,21 @@ kernel.registerInterrupt:
     pop ax
     ret
 
+; Return from an interrupt without restoring the original CF.
+kernel.iretCarry:
+	jc .carrySet
+.noCarry:
+    add sp, 6
+.ret:
+    pushf
+    sub sp, 4
+    iret
+.carrySet:
+	add sp, 6
+	stc
+	jmp .ret
+
+
 ; The kernel system call
 ; BP specifies the function to call.
 ; 0 - kalloc
@@ -178,17 +193,19 @@ kernel.systemInterrupt:
 
     ; Invalid, set carry.
     stc
-.done:
-    ; Restore DS
+.return:
+    ; Restore DS.
     pop ds
-    iret
+
+	; Return
+	jmp kernel.iretCarry
 
 .kalloc:
     call kalloc.kalloc
-    jmp .done
+    jmp .return
 .kfree:
     call kalloc.kfree
-    jmp .done
+    jmp .return
 
 
 ; The console I/O system call.
@@ -199,6 +216,7 @@ kernel.systemInterrupt:
 ; 3 - printChar
 ; 4 - readLine
 kernel.consoleInterrupt:
+    xchg bx, bx
     ; Which function?
     cmp bp, 0
     jz .print
@@ -213,22 +231,25 @@ kernel.consoleInterrupt:
 
     ; None of the above, set carry and return
     stc
-    iret
+.return:
+    ; We don't want to restore the original flags, as that would overwrite CF.
+	jmp kernel.iretCarry
+
 .print:
     call console.print
-    iret
+    jmp .return
 .printf:
     call console.printf
-    iret
+    jmp .return
 .newline:
     call console.newline
-    iret
+    jmp .return
 .printChar:
     call console.printChar
-    iret
+    jmp .return
 .readLine:
     call console.readLine
-    iret
+    jmp .return
 
 
 kernel.bootMessage db "[+] kernel: booted!", 13, 10, 0

@@ -216,7 +216,6 @@ kernel.systemInterrupt:
 ; 3 - printChar
 ; 4 - readLine
 kernel.consoleInterrupt:
-    xchg bx, bx
     ; Which function?
     cmp bp, 0
     jz .print

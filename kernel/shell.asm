@@ -589,7 +589,6 @@ shell.interrupt:
     clc
 .enumDirDone:
     pop si
-    xchg bx, bx
     jmp .return
 .findEntry:
     call shell.findEntry

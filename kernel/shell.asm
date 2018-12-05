@@ -28,6 +28,11 @@ shell.init:
     mov si, shell.initMessage
     call console.print
 
+    ; Register the interrupt
+    mov dx, shell.interrupt
+    mov bl, 0x22
+    call kernel.registerInterrupt
+
     ; Preserve the FAT context segment
     mov [shell._status.FATContextSegment], gs
 
@@ -530,6 +535,73 @@ shell.mainLoop:
 .farJumpOffset dw 0
 .farJumpSegment dw 0
 
+
+; The system call for shell functions.
+; BP is the function number.
+; 0 - enumDir.init
+; 1 - enumDir.nextEntry
+; 2 - findEntry
+; 3 - readFile
+; 4 - changeDirectory
+shell.interrupt:
+    ; Preserve DS and set it to the kernel data segment.
+    push ds
+
+    push word KERNEL_SEGMENT
+    pop ds
+
+    cmp bp, 0
+    jz .enumDirInit
+    cmp bp, 1
+    jz .enumDirNext
+    cmp bp, 2
+    jz .findEntry
+    cmp bp, 3
+    jz .readFile
+    cmp bp, 4
+    jz .changeDir
+
+    ; Set carry (invalid function).
+    stc
+.return:
+    ; Restore DS
+    pop ds
+
+	; Return
+	jmp kernel.iretCarry
+
+.enumDirInit:
+    call shell.enumDir.init
+    jmp .return
+.enumDirNext:
+    ; Copy to ES:DI from a temporary buffer.
+    push si
+    mov si, .tempFilename
+    call shell.enumDir.nextEntry
+
+    ; On EOF, return
+    jc .enumDirDone
+
+    ; Copy the filename from the temporary buffer into ES:DI.
+    call string.copy
+
+    ; Clear carry
+    clc
+.enumDirDone:
+    pop si
+    xchg bx, bx
+    jmp .return
+.findEntry:
+    call shell.findEntry
+    jmp .return
+.readFile:
+    call shell.readFile
+    jmp .return
+.changeDir:
+    call shell.changeDirectory
+    jmp .return
+
+.tempFilename times 13 db 0
 
 shell.errorMessage db "[!] shell: error, halting.", 13, 10, 0
 shell.initMessage db "[+] shell: initializing...", 13, 10, 0

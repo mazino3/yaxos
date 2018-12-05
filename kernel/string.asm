@@ -54,3 +54,29 @@ string.length:
     pop di
     pop ax
     ret
+
+
+; Copies a zero-terminated string from DS:SI into ES:DI.
+string.copy:
+    push ax
+    push si
+    push di
+
+.loop:
+    ; Load byte
+    lodsb
+
+    ; Store byte
+    stosb
+
+    ; Zero?
+    test al, al
+    jz .done
+
+    jmp .loop
+.done:
+    pop di
+    pop si
+    pop ax
+
+    ret

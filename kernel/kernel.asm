@@ -197,7 +197,7 @@ kernel.systemInterrupt:
     ; Restore DS.
     pop ds
 
-	; Return
+    ; Return
     jmp kernel.iretCarry
 
 .kalloc:

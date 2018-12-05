@@ -3,6 +3,9 @@ org 0
 bits 16
 
 ; tohloo-loader has placed us at 17c0:0000.
+KERNEL_SEGMENT equ 0x17c0
+
+; Jump to the init code.
 jmp kernel.init
 
 ; Include the subroutines
@@ -34,9 +37,13 @@ kernel.init:
     mov si, kernel.bootMessage
     call console.print
 
-    ; Register the system call interrupt
+    ; Register the system calls
     mov bl, 0x20
-    mov dx, kernel.interrupt
+    mov dx, kernel.systemInterrupt
+    call kernel.registerInterrupt
+
+    mov bl, 0x21
+    mov dx, kernel.consoleInterrupt
     call kernel.registerInterrupt
 
     ; Restore the drive number
@@ -151,56 +158,78 @@ kernel.registerInterrupt:
     pop ax
     ret
 
-; The system call interrupt.
+; The kernel system call
+; BP specifies the function to call.
+; 0 - kalloc
+; 1 - kfree
+kernel.systemInterrupt:
+    ; Preserve DS
+    push ds
+
+    ; Set DS to the kernel segment.
+    push word KERNEL_SEGMENT
+    pop ds
+
+    ; Which function?
+    cmp bp, 0
+    jz .kalloc
+    cmp bp, 1
+    jz .kfree
+
+    ; Invalid, set carry.
+    stc
+.done:
+    ; Restore DS
+    pop ds
+    iret
+
+.kalloc:
+    call kalloc.kalloc
+    jmp .done
+.kfree:
+    call kalloc.kfree
+    jmp .done
+
+
+; The console I/O system call.
 ; BP specifies the function to call.
 ; 0 - print
 ; 1 - printf
 ; 2 - newline
 ; 3 - printChar
 ; 4 - readLine
-; 0x15 - kalloc
-; 0x16 - kfree
-kernel.interrupt:
+kernel.consoleInterrupt:
     ; Which function?
     cmp bp, 0
-    jz .consolePrint
+    jz .print
     cmp bp, 1
-    jz .consolePrintf
+    jz .printf
     cmp bp, 2
-    jz .consoleNewline
+    jz .newline
     cmp bp, 3
-    jz .consolePrintChar
+    jz .printChar
     cmp bp, 4
-    jz .consoleReadLine
-    cmp bp, 0x15
-    jz .kallocKalloc
-    cmp bp, 0x16
-    jz .kallocKfree
+    jz .readLine
 
     ; None of the above, set carry and return
     stc
     iret
-.consolePrint:
+.print:
     call console.print
     iret
-.consolePrintf:
+.printf:
     call console.printf
     iret
-.consoleNewline:
+.newline:
     call console.newline
     iret
-.consolePrintChar:
+.printChar:
     call console.printChar
     iret
-.consoleReadLine:
+.readLine:
     call console.readLine
     iret
-.kallocKalloc:
-    call kalloc.kalloc
-    iret
-.kallocKfree:
-    call kalloc.kfree
-    iret
+
 
 kernel.bootMessage db "[+] kernel: booted!", 13, 10, 0
 kernel.errorMessage db "[!] kernel: error, halting...", 13, 10, 0

@@ -1,14 +1,17 @@
 ; YaxOS test program
 org 0
 
+; Include the interrupt header.
+%include "../include/interrupts.asm"
+
 ; Initialize the data segment
 mov ax, cs
 mov ds, ax
 
 ; console.print syscall
 mov si, helloWorld
-mov bp, 0
-int 20h
+mov bp, CONSOLE_PRINT
+int INTERRUPT_CONSOLE
 
 ; Return
 retf

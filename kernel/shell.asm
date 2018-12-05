@@ -26,11 +26,6 @@ shell.init:
     mov si, shell.initMessage
     call console.print
 
-    ; Register the interrupt.
-    mov dx, shell.interrupt
-    mov bl, 0x21
-    call kernel.registerInterrupt
-
     ; Preserve the FAT context segment
     mov [shell._status.FATContextSegment], gs
 
@@ -494,35 +489,6 @@ shell.mainLoop:
 .farJump:
 .farJumpOffset dw 0
 .farJumpSegment dw 0
-
-
-; Shell functions system call.
-; BP contains the function number.
-shell.interrupt:
-    ; Find the shell function by number.
-    cmp bp, 0
-    jz .changeDirectory
-    cmp bp, 1
-    jz .readFile
-    cmp bp, 2
-    jz .findEntry
-
-    ; None of the listed functions, set carry and return.
-    stc
-    iret
-
-.changeDirectory:
-    call shell.changeDirectory
-    iret
-
-.readFile:
-    call shell.readFile
-    iret
-
-.findEntry:
-    call shell.findEntry
-    iret
-
 
 
 shell.errorMessage db "[!] shell: error, halting.", 13, 10, 0

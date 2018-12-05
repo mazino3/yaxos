@@ -1,4 +1,4 @@
-all: clean kernel/kernel.bin boot/disk.img test-program/test.bin
+all: clean kernel/kernel.bin boot/disk.img test-program/testprog.com
 
 clean:
 	cd kernel && make clean
@@ -8,10 +8,10 @@ clean:
 kernel/kernel.bin:
 	cd kernel && make
 
-boot/disk.img: kernel/kernel.bin test-program/test.bin
+boot/disk.img: kernel/kernel.bin test-program/testprog.com
 	cd boot && make
 
-test-program/test.bin:
+test-program/testprog.com:
 	cd test-program && make
 
 test: all

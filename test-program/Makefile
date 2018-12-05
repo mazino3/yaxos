@@ -1,7 +1,7 @@
-all: clean test.bin
+all: clean testprog.com
 
 clean:
-	rm -f test.bin
+	rm -f testprog.com
 
-test.bin:
-	nasm test.asm -o test.bin
+testprog.com:
+	nasm testprog.asm -o testprog.com

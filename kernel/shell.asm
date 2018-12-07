@@ -6,6 +6,10 @@ bits 16
 ; The commands can be up to 256 characters long.
 SHELL_COMMAND_BUFFER_SIZE equ 256
 
+; The LS listing will pause after every 20 entries.
+LS_LINES_PER_PAGE equ 20
+
+
 ; The current status of the shell
 shell._status:
     .FATContextSegment          dw 0
@@ -136,9 +140,13 @@ shell.listFiles:
     push bx
     push ecx
     push si
+    push dx
 
     ; Initialize the directory enumeration
     call shell.enumDir.init
+
+    ; DX counts the entries printed.
+    xor dx, dx
 
 .nextEntry:
     ; Parse the directory entry at FS.
@@ -162,10 +170,25 @@ shell.listFiles:
     mov si, .tempFilenameLine
     call console.print
     call console.newline
+
+    ; Increment DX
+    inc dx
+
+    ; Should we pause now?
+    cmp dx, LS_LINES_PER_PAGE
+    jnz .noPause
+
+    ; Pause
+    call shell.pause
+
+    ; Reset the line counter.
+    xor dx, dx
+.noPause:
     jmp .nextEntry
 
 .done:
     ; Done, restore registers and exit.
+    pop dx
     pop si
     pop ecx
     pop bx
@@ -644,6 +667,25 @@ shell.interrupt:
     jmp .return
 
 .tempFilename times 13 db 0
+
+
+; Prints a message and waits for a keypress until returning.
+shell.pause:
+    push ax
+    push si
+
+    ; Print "Press any key to continue"
+    mov si, .pauseMessage
+    call console.print
+
+    ; Wait for a keypress
+    call console.waitKey
+
+    pop si
+    pop ax
+    ret
+.pauseMessage db "Press any key to continue...", 13, 10, 0
+
 
 shell.errorMessage db "[!] shell: error, halting.", 13, 10, 0
 shell.initMessage db "[+] shell: initializing...", 13, 10, 0

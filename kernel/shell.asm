@@ -378,7 +378,7 @@ shell.mainLoop:
     ; Read a command into the command buffer
     mov es, [shell._status.commandBufferSegment]
     xor di, di
-    mov cx, SHELL_COMMAND_BUFFER_SIZE
+    mov cx, SHELL_COMMAND_BUFFER_SIZE-1
     call console.readLine
 
     ; Find the first space character (BX will be zero if it's at the beginning or there are no spaces in the command).

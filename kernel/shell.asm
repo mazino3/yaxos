@@ -321,6 +321,10 @@ shell.readFile:
     test bl, FAT_ATTRIBUTE_DIRECTORY
     jnz .fileExpected
 
+    ; Empty?
+    test cx, cx
+    jz .emptyFile
+
     ; Restore the FAT context segment.
     mov gs, [shell._status.FATContextSegment]
 
@@ -334,6 +338,7 @@ shell.readFile:
     push fs
     pop es
 
+.emptyFile:
     ; No carry
     clc
 

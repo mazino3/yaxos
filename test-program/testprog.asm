@@ -9,10 +9,36 @@ mov ax, cs
 mov ds, ax
 mov es, ax
 
+; Preserve BP (the command line pointer).
+mov bx, bp
+
 ; console.print syscall
 mov si, helloWorld
 mov bp, CONSOLE_PRINT
 int INTERRUPT_CONSOLE
+
+; Print the command line if it exists
+test bx, bx
+jz noCommandLine
+
+; Copy the command line from FS:BX if it exists.
+mov si, commandLine
+copyCommandLine:
+    mov al, [fs:bx]
+    mov [si], al
+    inc bx
+    inc si
+    test al, al
+    jnz copyCommandLine
+
+; Print the command line
+mov si, commandLinePrefix
+int INTERRUPT_CONSOLE
+
+mov bp, CONSOLE_NEWLINE
+int INTERRUPT_CONSOLE
+
+noCommandLine:
 
 ; Try listing the current directory
 mov bp, SHELL_ENUM_INIT
@@ -47,3 +73,6 @@ return:
 helloWorld db "Hello world from the YaxOS test program!", 13, 10, 0
 filenamePrefix db "Found file: "
 filename times 13 db 0
+
+commandLinePrefix db "Command line: "
+commandLine times 256 db 0

@@ -276,3 +276,10 @@ console.printChar:
     int 10h
     pop ax
     ret
+
+; Waits for a keypress.
+; Returns the charcode in AL.
+console.waitKey:
+    xor ax, ax
+    int 16h
+    ret

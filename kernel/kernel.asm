@@ -232,7 +232,7 @@ kernel.consoleInterrupt:
     stc
 .return:
     ; We don't want to restore the original flags, as that would overwrite CF.
-	jmp kernel.iretCarry
+    jmp kernel.iretCarry
 
 .print:
     call console.print

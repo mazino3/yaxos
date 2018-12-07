@@ -95,6 +95,7 @@ shell.enumDir.init:
 shell.enumDir.nextEntry:
     push fs
 
+.next:
     ; Are we at the end of the current directory?
     mov ax, [shell._status.currentDirectoryLength]
     cmp [shell._status.currentDirectoryEnumPos], ax
@@ -112,6 +113,10 @@ shell.enumDir.nextEntry:
     ; Increment the segment and the position
     add word [shell._status.currentDirectoryEnumSeg], FAT_SEGMENTS_PER_DIR_ENTRY
     add word [shell._status.currentDirectoryEnumPos], FATDirEntry.size
+
+    ; If the entry has the volume label attribute set, ignore it.
+    test bl, FAT_ATTRIBUTE_VOLUME_LABEL
+    jnz .next
 
     ; No carry
     clc
@@ -505,6 +510,33 @@ shell.mainLoop:
     test bx, bx
     jz .noArgument
 
+    ; Terminate the filename at the first space
+    mov bp, bx
+.runTerminateFilename:
+    ; End?
+    cmp [es:bp], byte 0
+    jz .runTerminateZero
+
+    ; Space?
+    cmp [es:bp], byte ' '
+    jnz .runTerminateNext
+
+    ; Terminate the string at the location of the space.
+    mov [es:bp], byte 0
+    inc bp
+    jmp .runTerminateDone
+
+.runTerminateNext:
+    inc bp
+    jmp .runTerminateFilename
+.runTerminateZero:
+    ; Clear BP (no arguments)
+    xor bp, bp
+.runTerminateDone:
+    ; Preserve ES
+    mov ax, es
+    mov fs, ax
+
     ; Read the file into ES.
     mov di, bx
     call shell.readFile
@@ -517,16 +549,13 @@ shell.mainLoop:
     jz .emptyFile
 
     ; Jump into the loaded program
+    ; FS:BP points to the command line if it exists.
     mov [.farJumpSegment], es
 
     pusha
     push ds
     push es
-    push fs
-    push gs
     call far [.farJump]
-    pop gs
-    pop fs
     pop es
     pop ds
     popa

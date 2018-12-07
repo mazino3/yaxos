@@ -512,6 +512,10 @@ shell.mainLoop:
     ; On error, wait for the next command.
     jc .waitCommand
 
+    ; Test if the length is zero
+    test cx, cx
+    jz .emptyFile
+
     ; Jump into the loaded program
     mov [.farJumpSegment], es
 
@@ -535,6 +539,11 @@ shell.mainLoop:
     mov si, shell.noArgumentMessage
     call console.print
     jmp .waitCommand
+.emptyFile:
+    mov si, .emptyFileMessage
+    call console.print
+    jmp .waitCommand
+.emptyFileMessage db "error: the file is empty!", 13, 10, 0
 
 .farJump:
 .farJumpOffset dw 0

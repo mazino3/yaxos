@@ -19,13 +19,19 @@ KERNEL_HEAP_START_SEGMENT   equ KERNEL_HEAP_START>>4
 ALLOC_SEGMENTS_PER_BLOCK    equ ALLOC_BLOCK_SIZE>>4
 
 ; Flags for kalloc._allocMap
-ALLOC_FREE  equ 0x00
-ALLOC_USED  equ 0xff
+ALLOC_FREE  equ 0xab
+ALLOC_USED  equ 0xcd
+
+; Header signature
+KALLOC_HEADER_SIGNATURE equ "Used"
+KALLOC_HEADER_SIGNATURE_INVALID equ "Inv!"
+
 
 ; Allocation header, for kalloc.kalloc
 struc allocHeader
     .blockIndex resw 1
     .blocksUsed resw 1
+    .signature resd 1
 endstruc
 
 
@@ -161,8 +167,15 @@ kalloc.freeBlocks:
 kalloc.kalloc:
     push eax
     push ebx
+    push edx
     push cx
     push si
+
+    ; Debug
+    xor edx, edx
+    mov dx, cx
+    mov si, .debugMessage
+    call console.printf
 
     ; Add the header length and round to the lowest higher or equal block
     add cx, 16 + ALLOC_BLOCK_SIZE - 1
@@ -192,6 +205,7 @@ kalloc.kalloc:
 
     mov [fs:allocHeader.blockIndex], si
     mov [fs:allocHeader.blocksUsed], cx
+    mov [fs:allocHeader.signature], dword KALLOC_HEADER_SIGNATURE
 
     ; Add a 16-byte offset (past the allocation structure)
     inc ax
@@ -204,6 +218,7 @@ kalloc.kalloc:
     ; Restore the registers, return
     pop si
     pop cx
+    pop edx
     pop ebx
     pop eax
 
@@ -224,6 +239,7 @@ kalloc.kalloc:
     ; Set carry
     stc
     jmp .done
+.debugMessage db "kalloc: allocating %x bytes.", 13, 10, 0
 
 
 ; Frees a memory region allocated by kalloc.kalloc, FS points to the block previously allocated.
@@ -238,10 +254,21 @@ kalloc.kfree:
     dec ax
     mov fs, ax
 
+    ; Check the signature
+    cmp [fs:allocHeader.signature], dword KALLOC_HEADER_SIGNATURE
+    jnz .invalidSignature
+
+    ; Invalidate the signature
+    mov [fs:allocHeader.signature], dword KALLOC_HEADER_SIGNATURE_INVALID
+
     ; Call freeBlocks
     mov si, [fs:allocHeader.blockIndex]
     mov cx, [fs:allocHeader.blocksUsed]
     call kalloc.freeBlocks
+
+    ; Log
+    mov si, .debugMessage
+    call console.print
 
     ; Restore the registers, done
     pop fs
@@ -249,6 +276,18 @@ kalloc.kfree:
     pop cx
     pop ax
     ret
+.invalidSignature:
+    ; Invalid header signature, halt.
+
+    ; Bochs breakpoint
+    xchg bx, bx
+
+    mov si, .invalidSignatureMessage
+    call console.print
+    jmp kernel.halt
+
+.debugMessage db "kalloc: kfree called.", 13, 10, 0
+.invalidSignatureMessage db "kalloc: invalid header signature in kfree, halting...", 13, 10, 0
 
 
 ; Prints debug info about the memory allocation.

@@ -526,6 +526,10 @@ shell.mainLoop:
 
 .printDone:
     ; Release the memory the file was read into.
+
+    ; ES -> FS
+    push es
+    pop fs
     call kalloc.kfree
 
     ; Newline
@@ -588,6 +592,11 @@ shell.mainLoop:
     popa
 
     ; Free the memory allocated.
+
+    ; ES -> FS
+    push es
+    pop fs
+
     call kalloc.kfree
     jmp .waitCommand
 

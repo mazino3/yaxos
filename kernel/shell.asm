@@ -260,6 +260,7 @@ shell.findEntry:
 shell.changeDirectory:
     push eax
     push ecx
+    push bx
     push fs
     push gs
     push si
@@ -317,6 +318,7 @@ shell.changeDirectory:
     pop si
     pop gs
     pop fs
+    pop bx
     pop ecx
     pop eax
     ret
@@ -416,6 +418,115 @@ shell.readFile:
 .readErrorMessage db "readFile: read error.", 13, 10, 0
 
 
+; Changes the current directory according to the path specified in ES:DI.
+shell.changeDirectoryPath:
+    push ax
+    push bx
+    push dx
+    push si
+    push di
+
+    ; BX points to the beginning of the current subdirectory name.
+    mov bx, di
+
+    ; Next slash character
+.nextSlash:
+    ; Load the next character
+    mov al, [es:bx]
+    inc bx
+
+    ; Zero, the path is over
+    cmp al, 0
+    jz .found
+
+    ; Slash?
+    cmp al, '/'
+    jz .found
+
+    ; Skip
+    jmp .nextSlash
+.found:
+    ; Terminate the path at the current slash.
+    mov si, bx
+    dec si
+    mov [es:si], byte 0
+
+    ; ES:DI points to the subdirectory name.
+    call shell.changeDirectory
+    jc .done
+
+    ; The start of the next subdirectory name is at BX.
+    mov di, bx
+
+    ; If AL is not zero, continue.
+    test al, al
+    jnz .nextSlash
+.done:
+    pop di
+    pop si
+    pop dx
+    pop bx
+    pop ax
+    ret
+
+
+; Splits a path, changes the current directory and calls readFile on the actual filename.
+; ES:DI points to the path (which will be modified).
+shell.readFilePath:
+    push ax
+    push bx
+    push dx
+    push si
+
+    mov bx, di
+    mov dx, di
+
+    ; Finds the last '/' character in the path.
+.findLastSlash:
+    ; Load a character
+    mov al, [es:bx]
+    inc bx
+
+    ; Zero?
+    cmp al, 0
+    jz .findDone
+
+    ; Slash?
+    cmp al, '/'
+    jnz .findLastSlash
+.slashFound:
+    ; Store the position of the current slash.
+    mov dx, bx
+    jmp .findLastSlash
+.findDone:
+    ; ES:DX points to the filename without the preceding path.
+    ; ES:DI points to the directory path.
+
+    ; Terminate the path before the filename.
+    test dx, dx
+    jz .noSlash
+
+    mov si, dx
+    dec si
+    mov [es:si], byte 0
+.noSlash:
+    ; Change the current directory.
+    call shell.changeDirectoryPath
+    jc .return
+
+    ; Read the file.
+    mov di, dx
+    call shell.readFile
+
+.return:
+    ; Restore the registers.
+    pop si
+    pop dx
+    pop bx
+    pop ax
+    ret
+
+
 ; The main loop of the shell (get command, etc).
 shell.mainLoop:
 .waitCommand:
@@ -508,7 +619,7 @@ shell.mainLoop:
 
     ; Change the directory
     mov di, bx
-    call shell.changeDirectory
+    call shell.changeDirectoryPath
 
     jmp .waitCommand
 
@@ -519,7 +630,7 @@ shell.mainLoop:
 
     ; Read the file into ES.
     mov di, bx
-    call shell.readFile
+    call shell.readFilePath
 
     ; On error, wait for the next command.
     jc .waitCommand
@@ -584,7 +695,7 @@ shell.mainLoop:
 
     ; Read the file into ES.
     mov di, bx
-    call shell.readFile
+    call shell.readFilePath
 
     ; On error, wait for the next command.
     jc .waitCommand

@@ -251,5 +251,74 @@ kalloc.kfree:
     ret
 
 
+; Prints debug info about the memory allocation.
+kalloc.debug:
+    push ax
+    push cx
+    push edx
+    push si
+
+    ; Print the debug message
+    mov si, .debugMessage
+    call console.print
+
+    ; Count the free blocks and print the memory map
+    mov si, kalloc._allocMap
+    mov cx, KERNEL_HEAP_BLOCKS
+
+    ; DX is the counter
+    xor dx, dx
+.loop:
+    ; More iterations?
+    test cx, cx
+    jz .done
+
+    ; Decrement CX
+    dec cx
+
+    ; Load a byte of the allocation map.
+    lodsb
+
+    ; Is this block used?
+    cmp al, ALLOC_USED
+    jnz .freeBlock
+
+    ; Increment the used block counter.
+    inc dx
+
+    ; Indicate an used block.
+    mov al, '#'
+    call console.printChar
+    jmp .loop
+
+.freeBlock:
+    ; Indicate a free block.
+    mov al, '.'
+    call console.printChar
+    jmp .loop
+
+.done:
+    ; Newline
+    call console.newline
+
+    ; Shift the amount of used blocks into the top of EDX.
+    shl edx, 16
+    mov dx, KERNEL_HEAP_BLOCKS
+
+    ; Print the debug message.
+    mov si, .heapUsageMessage
+    call console.printf
+
+    ; Restore the registers, return.
+    pop si
+    pop edx
+    pop cx
+    pop ax
+    ret
+
+.debugMessage db "kalloc: printing memory allocation map.", 13, 10, 0
+.heapUsageMessage db "kalloc: heap usage (xxxxyyyy, used and total): %x.", 13, 10, 0
+
 kalloc._outOfMemErrorMessage db "kalloc: out of memory!", 13, 10, 0
 kalloc._overflowErrorMessage db "kalloc: CX is too big!", 13, 10, 0
+

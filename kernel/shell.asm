@@ -467,6 +467,10 @@ shell.mainLoop:
     call string.compare
     jz .commandRun
 
+    mov si, shell.commandHeap
+    call string.compare
+    jz .commandHeap
+
     ; Invalid command
     mov si, shell.invalidCommandMessage
     call console.print
@@ -587,6 +591,11 @@ shell.mainLoop:
     call kalloc.kfree
     jmp .waitCommand
 
+.commandHeap:
+    ; Print the kalloc debug info.
+    call kalloc.debug
+    jmp .waitCommand
+
 .noArgument:
     mov si, shell.noArgumentMessage
     call console.print
@@ -702,5 +711,6 @@ shell.commandLS db "ls", 0
 shell.commandCD db "cd", 0
 shell.commandCat db "cat", 0
 shell.commandRun db "run", 0
+shell.commandHeap db "heap", 0
 
-shell.helpMessage db "Available commands: help, ls, cd, cat, run.", 13, 10, 0
+shell.helpMessage db "Available commands: help, ls, cd, cat, run, heap.", 13, 10, 0

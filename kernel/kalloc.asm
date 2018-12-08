@@ -171,12 +171,6 @@ kalloc.kalloc:
     push cx
     push si
 
-    ; Debug
-    xor edx, edx
-    mov dx, cx
-    mov si, .debugMessage
-    call console.printf
-
     ; Add the header length and round to the lowest higher or equal block
     add cx, 16 + ALLOC_BLOCK_SIZE - 1
 
@@ -239,7 +233,6 @@ kalloc.kalloc:
     ; Set carry
     stc
     jmp .done
-.debugMessage db "kalloc: allocating %x bytes.", 13, 10, 0
 
 
 ; Frees a memory region allocated by kalloc.kalloc, FS points to the block previously allocated.
@@ -266,10 +259,6 @@ kalloc.kfree:
     mov cx, [fs:allocHeader.blocksUsed]
     call kalloc.freeBlocks
 
-    ; Log
-    mov si, .debugMessage
-    call console.print
-
     ; Restore the registers, done
     pop fs
     pop si
@@ -279,14 +268,10 @@ kalloc.kfree:
 .invalidSignature:
     ; Invalid header signature, halt.
 
-    ; Bochs breakpoint
-    xchg bx, bx
-
     mov si, .invalidSignatureMessage
     call console.print
     jmp kernel.halt
 
-.debugMessage db "kalloc: kfree called.", 13, 10, 0
 .invalidSignatureMessage db "kalloc: invalid header signature in kfree, halting...", 13, 10, 0
 
 

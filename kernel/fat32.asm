@@ -43,6 +43,8 @@ struc FATBPB
     .systemId           resb 8
 endstruc
 
+; FAT32 context signature
+FAT_CONTEXT_SIGNATURE equ "FAT!"
 
 ; FAT32 context
 struc FATContext
@@ -53,8 +55,10 @@ struc FATContext
     .dataOffset         resd 1
     .dirsPerCluster     resd 1
     .rootCluster        resd 1
+    .signature          resd 1
     .size:
 endstruc
+
 
 ; FAT directory entry
 struc FATDirEntry
@@ -186,6 +190,19 @@ fat32.readPartition:
     jmp .return
 
 
+; Checks the signature of a FAT32 context at GS.
+; If it doesn't match, the context is corrupt and the kernel will be halted.
+fat32.context.checkSignature:
+    cmp [gs:FATContext.signature], dword FAT_CONTEXT_SIGNATURE
+    jnz .contextCorrupt
+    ret
+.contextCorrupt:
+    mov si, .contextCorruptMessage
+    call console.print
+    jmp kernel.halt
+.contextCorruptMessage db "fat32: context corrupt, halting...", 13, 10, 0
+
+
 ; Allocates a FAT32 context structure.
 ; GS will point to the allocated structure on success, CF will be set otherwise.
 fat32.context.alloc:
@@ -198,6 +215,9 @@ fat32.context.alloc:
 
     ; Return with carry
     jc .return
+
+    ; Set the signature
+    mov [fs:FATContext.signature], dword FAT_CONTEXT_SIGNATURE
 
     ; Store FS in GS
     push fs
@@ -220,6 +240,9 @@ fat32.context.free:
     ; Preserve FS
     push fs
 
+    ; Test the signature
+    call fat32.context.checkSignature
+
     ; Free the memory
     push gs
     pop fs
@@ -241,6 +264,9 @@ fat32.mount:
     push edx
     push cx
     push fs
+
+    ; Check the signature of the context
+    call fat32.context.checkSignature
 
     ; Allocate memory for the first sector of the partition
     mov cx, 512
@@ -336,6 +362,9 @@ fat32._readFAT:
     push dx
     push fs
 
+    ; Check the context signature
+    call fat32.context.checkSignature
+
     ; Allocate a sector for reading the FAT into (FS will point there).
     mov cx, 512
     call kalloc.kalloc
@@ -409,6 +438,9 @@ fat32._readCluster:
     push edx
     push ecx
 
+    ; Check the signature
+    call fat32.context.checkSignature
+
     ; Subtract the cluster offset.
     sub eax, 2
 
@@ -461,6 +493,9 @@ fat32._readCluster:
 fat32.readClusterChain:
     push eax
     push edx
+
+    ; Check the context signature
+    call fat32.context.checkSignature
 
     ; Find out the length of the cluster chain first.
     xor cx, cx

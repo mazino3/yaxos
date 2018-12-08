@@ -9,6 +9,9 @@ SHELL_COMMAND_BUFFER_SIZE equ 256
 ; The LS listing will pause after every 20 entries.
 LS_LINES_PER_PAGE equ 20
 
+; The signature of the shell status structure
+SHELL_STATUS_SIGNATURE equ "Stat"
+
 
 ; The current status of the shell
 shell._status:
@@ -18,6 +21,7 @@ shell._status:
     .commandBufferSegment       dw 0
     .currentDirectoryEnumPos    dw 0
     .currentDirectoryEnumSeg    dw 0
+    .signature                  dd SHELL_STATUS_SIGNATURE
 
 
 ; Initializes the shell.
@@ -81,6 +85,16 @@ shell.error:
     call console.print
     jmp kernel.halt
 
+
+; Checks the shell status signature to detect corruption.
+shell.checkSignature:
+    cmp [shell._status.signature], dword SHELL_STATUS_SIGNATURE
+    jnz .signatureError
+    ret
+.signatureError:
+    mov si, .signatureErrorMessage
+    jmp kernel.halt
+.signatureErrorMessage db "shell: invalid signature of the status structure, halting...", 13, 10, 0
 
 ; Prepares to enumerate the current directory.
 shell.enumDir.init:
@@ -633,6 +647,9 @@ shell.interrupt:
 
     push word KERNEL_SEGMENT
     pop ds
+
+    ; Check the signature of the shell structures.
+    call shell.checkSignature
 
     cmp bp, 0
     jz .enumDirInit

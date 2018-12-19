@@ -510,10 +510,15 @@ shell.readFilePath:
     dec si
     mov [es:si], byte 0
 .noSlash:
+    ; Is the directory name empty?
+    cmp di, dx
+    jz .skipChangeDirectory
+
     ; Change the current directory.
     call shell.changeDirectoryPath
     jc .return
 
+.skipChangeDirectory:
     ; Read the file.
     mov di, dx
     call shell.readFile

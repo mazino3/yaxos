@@ -21,6 +21,12 @@ shell._status:
     .commandBufferSegment       dw 0
     .currentDirectoryEnumPos    dw 0
     .currentDirectoryEnumSeg    dw 0
+
+    .prevDirectorySegment       dw 0
+    .prevDirectoryLength        dw 0
+    .prevDirectoryValid         db 0
+    .freeCurrentDirectory       db 0
+
     .signature                  dd SHELL_STATUS_SIGNATURE
 
 
@@ -56,6 +62,12 @@ shell.init:
     ; Update the status
     mov [shell._status.currentDirectorySegment], fs
     mov [shell._status.currentDirectoryLength], cx
+
+    ; The current directory can be freed.
+    mov [shell._status.freeCurrentDirectory], byte 1
+
+    ; No valid previous directory.
+    mov [shell._status.prevDirectoryValid], byte 0
 
     ; Allocate the buffers
     mov si, shell.allocMessage
@@ -290,8 +302,13 @@ shell.changeDirectory:
     mov fs, [shell._status.currentDirectorySegment]
     mov gs, [shell._status.FATContextSegment]
 
+    ; Should the current directory be freed?
+    cmp [shell._status.freeCurrentDirectory], byte 1
+    jnz .skipFree
+
     ; Free the cluster chain for the old directory.
     call kalloc.kfree
+.skipFree:
 
     ; If EAX is zero, replace it with the starting cluster of the root directory.
     test eax, eax
@@ -308,6 +325,9 @@ shell.changeDirectory:
     ; Write the new segment address
     mov [shell._status.currentDirectorySegment], fs
     mov [shell._status.currentDirectoryLength], cx
+
+    ; The current directory can be freed.
+    mov [shell._status.freeCurrentDirectory], byte 1
 
 .done:
     ; No carry
@@ -347,6 +367,68 @@ shell.changeDirectory:
 .notADirectoryMessage db "cd: not a directory.", 13, 10, 0
 .readErrorMessage db "cd: read error, halting the shell.", 13, 10, 0
 .rootDirectoryName db ":root", 0
+
+
+; Preserve the current directory.
+shell.preserveCurrentDirectory:
+    push ax
+
+    ; Make sure there was no directory preserved before
+    cmp [shell._status.prevDirectoryValid], byte 1
+    jz .prevError
+
+    ; Don't free the current directory when changing, since we have preserved that.
+    mov [shell._status.freeCurrentDirectory], byte 0
+
+    ; Preserve the current directory
+    mov ax, [shell._status.currentDirectorySegment]
+    mov [shell._status.prevDirectorySegment], ax
+    mov ax, [shell._status.currentDirectoryLength]
+    mov [shell._status.prevDirectoryLength], ax
+
+    ; Mark the previous directory valid.
+    mov [shell._status.prevDirectoryValid], byte 1
+
+    pop ax
+    ret
+
+.prevError:
+    mov si, .prevErrorMessage
+    call console.print
+    jmp shell.error
+.prevErrorMessage db "shell: already have a preserved directory", 13, 10, 0
+
+; Restore the current directory.
+shell.restoreCurrentDirectory:
+    push ax
+    push fs
+
+    ; Check if a directory was preserved first
+    cmp [shell._status.prevDirectoryValid], byte 1
+    jnz .noPrevDirectory
+
+    ; Free the current directory
+    mov ax, [shell._status.currentDirectorySegment]
+    mov fs, ax
+    call kalloc.kfree
+
+    ; Restore the current directory
+    mov ax, [shell._status.prevDirectorySegment]
+    mov [shell._status.currentDirectorySegment], ax
+    mov ax, [shell._status.prevDirectoryLength]
+    mov [shell._status.currentDirectoryLength], ax
+
+    ; Invalidate the preserved directory
+    mov [shell._status.prevDirectoryValid], byte 0
+
+    pop fs
+    pop ax
+    ret
+.noPrevDirectory:
+    mov si, .prevErrorMessage
+    call console.print
+    jmp shell.error
+.prevErrorMessage db "shell: no preserved directory to restore", 13, 10, 0
 
 
 ; Reads a file (ES:DI contains the filename).
@@ -514,15 +596,32 @@ shell.readFilePath:
     cmp di, dx
     jz .skipChangeDirectory
 
+    ; Preserve the current directory
+    call shell.preserveCurrentDirectory
+
     ; Change the current directory.
     call shell.changeDirectoryPath
-    jc .return
+    jc .returnError
+
+    ; Read the file
+    mov di, dx
+    call shell.readFile
+    jc .returnError
+    jmp .returnRestore
 
 .skipChangeDirectory:
     ; Read the file.
     mov di, dx
     call shell.readFile
+    jmp .return
 
+.returnError:
+    ; Set carry
+    stc
+.returnRestore:
+    pushf
+    call shell.restoreCurrentDirectory
+    popf
 .return:
     ; Restore the registers.
     pop si

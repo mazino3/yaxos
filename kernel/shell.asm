@@ -856,6 +856,8 @@ shell.mainLoop:
 ; 2 - findEntry
 ; 3 - readFile
 ; 4 - changeDirectory
+; 5 - readFilePath
+; 6 - changeDirectoryPath
 shell.interrupt:
     ; Preserve DS and set it to the kernel data segment.
     push ds
@@ -876,6 +878,10 @@ shell.interrupt:
     jz .readFile
     cmp bp, 4
     jz .changeDir
+    cmp bp, 5
+    jz .readFilePath
+    cmp bp, 6
+    jz .changeDirPath
 
     ; Set carry (invalid function).
     stc
@@ -914,6 +920,12 @@ shell.interrupt:
     jmp .return
 .changeDir:
     call shell.changeDirectory
+    jmp .return
+.readFilePath:
+    call shell.readFilePath
+    jmp .return
+.changeDirPath:
+    call shell.changeDirectoryPath
     jmp .return
 
 .tempFilename times 13 db 0

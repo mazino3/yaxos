@@ -15,12 +15,12 @@ clean:
 	rm -f disk.img mbr.bin bootsector.bin part.bin
 	cd bootsector && make clean
 
-disk.img: mbr.bin part.bin ../kernel/kernel.bin
+disk.img: mbr.bin part.bin ../kernel/kernel.bin ../utils/*.com
 	cat mbr.bin part.bin > disk.img
 
 	$(MCOPY) -i disk.img@@$(PART_START)s ../kernel/kernel.bin \:\:/
 	$(MCOPY) -s -i disk.img@@$(PART_START)s ../root/* \:\:/
-	$(MCOPY) -i disk.img@@$(PART_START)s ../test-program/*.com \:\:/
+	$(MCOPY) -i disk.img@@$(PART_START)s ../utils/*.com \:\:/
 
 mbr.bin:
 	$(DD) if=/dev/zero of=mbr.bin bs=512 count=$(DISK_SIZE)

@@ -105,6 +105,7 @@ shell.checkSignature:
     ret
 .signatureError:
     mov si, .signatureErrorMessage
+    call console.print
     jmp kernel.halt
 .signatureErrorMessage db "shell: invalid signature of the status structure, halting...", 13, 10, 0
 
